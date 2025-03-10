@@ -1,15 +1,23 @@
+
+
+
 package first;
 
 import javafx.application.Application;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.beans.property.SimpleStringProperty;
 import first.Server.LoadBalancer;
 import first.Rmiinterface.DataStorageInterface;
 import java.rmi.Naming;
 import java.rmi.RemoteException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class ClientGUI extends Application {
@@ -23,16 +31,13 @@ public class ClientGUI extends Application {
     @Override
     public void start(@SuppressWarnings("exports") Stage primaryStage) {
         try {
-            // Initialize the load balancer
             loadBalancer = new LoadBalancer();
 
-            // Create the main layout
             GridPane grid = new GridPane();
             grid.setPadding(new Insets(20));
             grid.setVgap(10);
             grid.setHgap(10);
 
-            // Add components
             Label keyLabel = new Label("Key:");
             TextField keyField = new TextField();
             Label valueLabel = new Label("Value:");
@@ -42,12 +47,9 @@ public class ClientGUI extends Application {
             Button retrieveButton = new Button("Retrieve Data");
             Button showButton = new Button("Show All Data");
             Button clearButton = new Button("Clear Window");
-            clearButton.setId("clearButton"); // Set ID for CSS styling
-
             TextArea outputArea = new TextArea();
             outputArea.setEditable(false);
 
-            // Add components to the grid
             grid.add(keyLabel, 0, 0);
             grid.add(keyField, 1, 0);
             grid.add(valueLabel, 0, 1);
@@ -57,8 +59,8 @@ public class ClientGUI extends Application {
             grid.add(showButton, 2, 2);
             grid.add(clearButton, 3, 2);
             grid.add(outputArea, 0, 3, 4, 1);
-
-            // Set up button actions
+          
+          
             storeButton.setOnAction(e -> {
                 String key = keyField.getText();
                 String value = valueField.getText();
@@ -67,8 +69,6 @@ public class ClientGUI extends Application {
                         DataStorageInterface server = loadBalancer.getServer();
                         server.storeData(key, value);
                         outputArea.appendText("Data stored: " + key + " = " + value + "\n");
-
-                        // Clear input fields after storing data
                         keyField.clear();
                         valueField.clear();
                     } catch (RemoteException ex) {
@@ -82,58 +82,79 @@ public class ClientGUI extends Application {
             retrieveButton.setOnAction(e -> {
                 String key = keyField.getText();
                 if (!key.isEmpty()) {
+                    boolean found = false; // Track if the key exists in any server
+            
                     try {
-                        DataStorageInterface server = loadBalancer.getServer();
-                        String value = server.retrieveData(key);
-                        if (value != null) {
-                            outputArea.appendText("Retrieved data: " + key + " = " + value + "\n");
-                        } else {
+                        for (String serverURL : loadBalancer.getServerURLs()) {
+                            DataStorageInterface server = (DataStorageInterface) Naming.lookup(serverURL);
+                            String value = server.retrieveData(key);
+                            if (value != null) {
+                                outputArea.appendText("Retrieved and deleted data: " + key + " = " + value + "\n");
+                                found = true;
+                                break; // Stop searching once found
+                            }
+                        }
+            
+                        if (!found) {
                             outputArea.appendText("No data found for key: " + key + "\n");
                         }
-                    } catch (RemoteException ex) {
+                    } catch (Exception ex) {
                         outputArea.appendText("Error retrieving data: " + ex.getMessage() + "\n");
                     }
                 } else {
                     outputArea.appendText("Key cannot be empty!\n");
                 }
             });
+            
+            showButton.setOnAction(e -> showAllData());
+            clearButton.setOnAction(e -> outputArea.clear());
 
-            showButton.setOnAction(e -> {
-                try {
-                    outputArea.appendText("Showing all data:\n");
-                    for (String serverURL : loadBalancer.getServerURLs()) {
-                        DataStorageInterface server = (DataStorageInterface) Naming.lookup(serverURL);
-                        outputArea.appendText("Data from server: " + serverURL + "\n");
-                        Map<String, String> data = server.showData();
-                        if (data.isEmpty()) {
-                            outputArea.appendText("No data stored on this server.\n");
-                        } else {
-                            for (Map.Entry<String, String> entry : data.entrySet()) {
-                                outputArea.appendText(entry.getKey() + " = " + entry.getValue() + "\n");
-                            }
-                        }
-                    }
-                } catch (Exception ex) {
-                    outputArea.appendText("Error showing data: " + ex.getMessage() + "\n");
-                }
-            });
-
-            // Clear Window button action
-            clearButton.setOnAction(e -> {
-                outputArea.clear(); // Clear the output area
-            });
-
-            // Set up the scene and stage
             Scene scene = new Scene(grid, 600, 400);
-
-            // Load the CSS file
-            // scene.getStylesheets().add(getClass().getResource("/styles.css").toExternalForm());
-
             primaryStage.setTitle("Distributed Data Storage Client");
             primaryStage.setScene(scene);
             primaryStage.show();
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private void showAllData() {
+        Stage tableStage = new Stage();
+        tableStage.setTitle("All Stored Data");
+
+        TableView<Map.Entry<String, String>> tableView = new TableView<>();
+        ObservableList<Map.Entry<String, String>> dataList = FXCollections.observableArrayList();
+        Map<String, Map<String, String>> serverData = new LinkedHashMap<>();
+
+        try {
+            for (String serverURL : loadBalancer.getServerURLs()) {
+                DataStorageInterface server = (DataStorageInterface) Naming.lookup(serverURL);
+                serverData.put(serverURL, server.showData());
+            }
+
+            TableColumn<Map.Entry<String, String>, String> keyColumn = new TableColumn<>("Key");
+            keyColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getKey()));
+            tableView.getColumns().add(keyColumn);
+
+            for (Map.Entry<String, Map<String, String>> serverEntry : serverData.entrySet()) {
+                TableColumn<Map.Entry<String, String>, String> serverColumn = new TableColumn<>(serverEntry.getKey());
+                serverColumn.setCellValueFactory(cellData -> new SimpleStringProperty(
+                        serverEntry.getValue().getOrDefault(cellData.getValue().getKey(), "-")));
+                tableView.getColumns().add(serverColumn);
+            }
+
+            for (Map<String, String> data : serverData.values()) {
+                dataList.addAll(data.entrySet());
+            }
+
+            tableView.setItems(dataList);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        VBox vbox = new VBox(tableView);
+        Scene scene = new Scene(vbox, 800, 400);
+        tableStage.setScene(scene);
+        tableStage.show();
     }
 }

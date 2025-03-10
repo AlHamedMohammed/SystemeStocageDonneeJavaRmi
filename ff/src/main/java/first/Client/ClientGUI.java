@@ -1,6 +1,4 @@
-package first.Client;
-
-// public package frist.Client;
+package first.Client ;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -43,6 +41,9 @@ public class ClientGUI extends Application {
             Button storeButton = new Button("Store Data");
             Button retrieveButton = new Button("Retrieve Data");
             Button showButton = new Button("Show All Data");
+            Button clearButton = new Button("Clear Window");
+            clearButton.setId("clearButton"); // Set ID for CSS styling
+
             TextArea outputArea = new TextArea();
             outputArea.setEditable(false);
 
@@ -54,7 +55,8 @@ public class ClientGUI extends Application {
             grid.add(storeButton, 0, 2);
             grid.add(retrieveButton, 1, 2);
             grid.add(showButton, 2, 2);
-            grid.add(outputArea, 0, 3, 3, 1);
+            grid.add(clearButton, 3, 2);
+            grid.add(outputArea, 0, 3, 4, 1);
 
             // Set up button actions
             storeButton.setOnAction(e -> {
@@ -65,6 +67,10 @@ public class ClientGUI extends Application {
                         DataStorageInterface server = loadBalancer.getServer();
                         server.storeData(key, value);
                         outputArea.appendText("Data stored: " + key + " = " + value + "\n");
+
+                        // Clear input fields after storing data
+                        keyField.clear();
+                        valueField.clear();
                     } catch (RemoteException ex) {
                         outputArea.appendText("Error storing data: " + ex.getMessage() + "\n");
                     }
@@ -112,8 +118,17 @@ public class ClientGUI extends Application {
                 }
             });
 
+            // Clear Window button action
+            clearButton.setOnAction(e -> {
+                outputArea.clear(); // Clear the output area
+            });
+
             // Set up the scene and stage
-            Scene scene = new Scene(grid, 500, 400);
+            Scene scene = new Scene(grid, 600, 400);
+
+            // Load the CSS file
+            // scene.getStylesheets().add(getClass().getResource("/styles.css").toExternalForm());
+
             primaryStage.setTitle("Distributed Data Storage Client");
             primaryStage.setScene(scene);
             primaryStage.show();
@@ -121,4 +136,4 @@ public class ClientGUI extends Application {
             e.printStackTrace();
         }
     }
-} 
+}
